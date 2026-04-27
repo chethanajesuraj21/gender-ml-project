@@ -27,9 +27,9 @@ CORS(app)
 # ===============================
 # MongoDB
 # ===============================
-client = MongoClient("mongodb://localhost:27017/")
-db = client["ml_project"]
-collection = db["results"]
+#client = MongoClient("mongodb://localhost:27017/")
+#db = client["ml_project"]
+#collection = db["results"]
 
 @app.route("/")
 def home():
@@ -40,10 +40,8 @@ def home():
 # ===============================
 def load_data():
     dataset_path = os.path.join(
-        os.path.dirname(__file__),
-        "..",
-        "dataset",
-        "eopen_final_strict_genderwise_country_dataset.csv"
+    os.path.dirname(__file__),
+    "../dataset/eopen_final_strict_genderwise_country_dataset.csv"
     )
 
     df = pd.read_csv(dataset_path)
@@ -180,7 +178,7 @@ def run_model():
             "timestamp": datetime.now()
         }
 
-        collection.insert_one(result)
+        #collection.insert_one(result)
 
         # ================= RESPONSE =================
         return jsonify({
@@ -292,7 +290,6 @@ def clear_results():
 from flask import  jsonify
 import numpy as np
 import joblib
-import tensorflow as tf
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
@@ -311,10 +308,12 @@ _, X_test, _, y_test = train_test_split(
 # ===============================
 # LOAD MODELS (ONCE)
 # ===============================
-dt = joblib.load("dt_model.pkl")
-rf = joblib.load("rf_model.pkl")
-lgbm = joblib.load("lgbm_model.pkl")
-cnn = tf.keras.models.load_model("cnn_model.h5")
+try:
+    dt = joblib.load("dt_model.pkl")
+    rf = joblib.load("rf_model.pkl")
+    lgbm = joblib.load("lgbm_model.pkl")
+except:
+    dt = rf = lgbm = None
 
 # ===============================
 # HYBRID API
@@ -325,7 +324,7 @@ def hybrid_results():
         dt_pred = dt.predict(X_test)
         rf_pred = rf.predict(X_test)
         lgb_pred = lgbm.predict(X_test)
-        cnn_pred = (cnn.predict(X_test) > 0.5).astype(int).flatten()
+        
 
         hybrid_pred = (
             (0.4 * rf_pred) +
