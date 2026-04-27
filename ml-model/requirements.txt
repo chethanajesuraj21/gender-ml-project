@@ -7,3 +7,5 @@ lightgbm
 joblib
 matplotlib
 imbalanced-learn
+pymongo
+dnspython
