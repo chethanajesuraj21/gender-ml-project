@@ -91,9 +91,9 @@ def run_model():
             model = lgb.LGBMClassifier(n_estimators=80, max_depth=4)
         
         elif model_name == "1D CNN":
-            import tensorflow as tf
+            import joblib
 
-            cnn_model = tf.keras.models.load_model("cnn_model.h5")
+            model = joblib.load("rf_model.pkl")
 
             # reshape for CNN
             X_train_cnn = X_train.reshape(X_train.shape[0], X_train.shape[1], 1)
