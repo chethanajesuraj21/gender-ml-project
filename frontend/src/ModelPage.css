@@ -1,0 +1,193 @@
+/* Background */
+.page {
+  min-height: 100vh;
+  background: url("../public/background.png") no-repeat center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.tree-card {
+  margin-top: 30px;
+  padding: 20px;
+  border-radius: 20px;
+  background: rgba(0,0,0,0.9);
+  text-align: center;
+  color: white;
+
+  box-shadow: 0 0 25px #00f7ff;
+  overflow: hidden;   /* ✅ prevents overflow */
+}
+
+/* 🔥 MAIN FIX */
+.tree-card img {
+  width: 100%;
+  max-width: 900px;   /* controls size */
+  height: auto;
+  border-radius: 10px;
+
+  margin-top: 15px;
+
+  /* center */
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+.card {
+  background: rgba(0, 0, 0, 0.6);
+  padding: 40px;
+  border-radius: 25px;
+  text-align: center;
+  width: 420px;
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(0,255,255,0.3);
+
+  box-shadow:
+    0 0 10px #00f7ff,
+    0 0 20px #00f7ff,
+    0 0 40px #00f7ff;
+}
+
+
+/* Title Neon Glow */
+.card h1 {
+  color: #00f7ff;
+  text-shadow:
+    0 0 5px #00f7ff,
+    0 0 10px #00f7ff,
+    0 0 20px #00f7ff;
+  margin-bottom: 25px;
+}
+
+/* Neon Buttons */
+.model-btn {
+  display: block;
+  width: 100%;
+  margin: 12px 0;
+  padding: 15px;
+  border-radius: 30px;
+  border: none;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  color: white;
+  background: transparent;
+  border: 2px solid #00f7ff;
+
+  text-shadow: 0 0 5px #00f7ff;
+
+  box-shadow:
+    0 0 5px #00f7ff,
+    inset 0 0 5px #00f7ff;
+
+  transition: 0.3s;
+}
+
+/* Hover Glow Explosion */
+.model-btn:hover {
+  background: #00f7ff;
+  color: black;
+  transform: scale(1.05);
+
+  box-shadow:
+    0 0 10px #00f7ff,
+    0 0 30px #00f7ff,
+    0 0 60px #00f7ff;
+}
+
+/* Clear Button (Red Neon) */
+.clear-btn {
+  margin-top: 15px;
+  padding: 10px 20px;
+  border-radius: 12px;
+  background: transparent;
+  border: 2px solid #ff3b3b;
+  color: #ff3b3b;
+
+  box-shadow:
+    0 0 5px #ff3b3b,
+    inset 0 0 5px #ff3b3b;
+
+  cursor: pointer;
+}
+
+.clear-btn:hover {
+  background: #ff3b3b;
+  color: white;
+
+  box-shadow:
+    0 0 15px #ff3b3b,
+    0 0 40px #ff3b3b;
+}
+
+/* Result Card Neon */
+.result-card {
+  margin-top: 25px;
+  padding: 20px;
+  border-radius: 15px;
+  background: rgba(0,0,0,0.8);
+  color: white;
+
+  box-shadow:
+    0 0 10px #00ff9f,
+    0 0 30px #00ff9f;
+}
+
+/* Table Neon */
+.table-card {
+  margin-top: 30px;
+  padding: 25px;
+  border-radius: 20px;
+  background: rgba(0,0,0,0.7);
+  color: white;
+  width: 420px;
+
+  box-shadow:
+    0 0 10px #9d00ff,
+    0 0 40px #9d00ff;
+}
+
+/* Table */
+table {
+  width: 100%;
+  margin-top: 10px;
+}
+
+th {
+  color: #00f7ff;
+}
+
+td {
+  padding: 8px;
+}
+
+.test {
+  color: #ffcc00;
+  text-shadow: 0 0 5px #ffcc00;
+}
+
+/* Neon Button */
+.viz-btn {
+  margin-top: 20px;
+  padding: 10px 20px;
+  border-radius: 20px;
+  border: 2px solid #00ff9f;
+  background: transparent;
+  color: #00ff9f;
+
+  box-shadow:
+    0 0 5px #00ff9f,
+    inset 0 0 5px #00ff9f;
+
+  cursor: pointer;
+}
+
+.viz-btn:hover {
+  background: #00ff9f;
+  color: black;
+
+  box-shadow:
+    0 0 15px #00ff9f,
+    0 0 40px #00ff9f;
+}
