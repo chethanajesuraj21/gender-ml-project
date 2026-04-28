@@ -10,25 +10,40 @@ function LoadDataset() {
     setFile(event.target.files[0]);
   };
 
-  // handle button click
-  const handleUpload = () => {
-    if (!file) {
-      alert("Please select a dataset first!");
-      return;
+  const handleUpload = async () => {
+  if (!file) {
+    alert("Please select dataset");
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const res = await fetch("http://127.0.0.1:5000/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      alert("Dataset Loaded ✅");
+      navigate("/models");
+    } else {
+      alert(data.error);
     }
-
-    alert("Dataset Loaded Successfully: " + file.name);
-
-    // navigate to model page
-    navigate("/models");
-  };
+  } catch (err) {
+    alert("Backend not running ❌");
+  }
+};
 
   return (
     <div
       style={{
         width: "100vw",
         height: "100vh",
-        backgroundImage: "url('/background.png')", // make sure image is in public folder
+        backgroundImage: "url('/background.png')",
         backgroundSize: "cover",
         backgroundPosition: "center",
         display: "flex",
@@ -61,11 +76,10 @@ function LoadDataset() {
           Load Dataset
         </h1>
 
-        {/* FILE INPUT */}
         <input
           type="file"
           accept=".csv"
-          onChange={handleFileChange}   // ✅ FIXED
+          onChange={handleFileChange}
           style={{
             margin: "15px 0",
             color: "white",
@@ -75,9 +89,8 @@ function LoadDataset() {
 
         <br />
 
-        {/* BUTTON */}
         <button
-          onClick={handleUpload}   // ✅ FIXED
+          onClick={handleUpload}
           style={{
             padding: "12px 30px",
             fontSize: "18px",

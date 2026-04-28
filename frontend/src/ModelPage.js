@@ -2,6 +2,9 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "./ModelPage.css";
 
+// ✅ ADD THIS
+const BASE_URL = "http://127.0.0.1:5000";
+
 function ModelPage() {
   const [result, setResult] = useState(null);
   const [allResults, setAllResults] = useState([]);
@@ -15,7 +18,7 @@ function ModelPage() {
     const token = localStorage.getItem("token");
 
     if (!token) {
-      navigate("/"); // redirect to login
+      navigate("/");
     }
   }, [navigate]);
 
@@ -24,7 +27,7 @@ function ModelPage() {
     try {
       setLoadingModel(model);
 
-      const res = await fetch("http://127.0.0.1:5000/run-model", {
+      const res = await fetch(`${BASE_URL}/run-model`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -37,7 +40,6 @@ function ModelPage() {
       const data = await res.json();
       console.log("API RESPONSE:", data);
 
-      // ✅ SAFE VALUES
       const newResult = {
         model,
         train: Number(data.training_accuracy || 0),
@@ -50,13 +52,11 @@ function ModelPage() {
 
       setResult(newResult);
 
-      // ✅ update table (no duplicate models)
       setAllResults((prev) => {
         const filtered = prev.filter((p) => p.model !== model);
         return [...filtered, newResult];
       });
 
-      // ✅ tree image (skip for CNN)
       if (data.tree_image && model !== "1D CNN") {
         setTreeImage(data.tree_image);
       } else {
@@ -65,7 +65,7 @@ function ModelPage() {
 
     } catch (err) {
       console.error(err);
-      alert("Backend connection error ❌\nMake sure Flask is running");
+      alert("Backend connection error ❌\nCheck API URL or server");
     } finally {
       setLoadingModel(null);
     }
@@ -74,7 +74,7 @@ function ModelPage() {
   // 🔥 CLEAR RESULTS
   const clearResults = async () => {
     try {
-      await fetch("http://127.0.0.1:5000/clear-results", {
+      await fetch(`${BASE_URL}/clear-results`, {
         method: "DELETE"
       });
     } catch {}
@@ -105,7 +105,7 @@ function ModelPage() {
           Clear Results
         </button>
 
-        {/* ================= RESULT CARD ================= */}
+        {/* RESULT CARD */}
         {result && (
           <div className="result-card">
             <h2>{result.model}</h2>
@@ -115,7 +115,7 @@ function ModelPage() {
             <p>CV Mean: {result.cv_mean.toFixed(4)}</p>
             <p>CV Std: {result.cv_std.toFixed(4)}</p>
 
-            {/* 🔥 CROSS VALIDATION SCORES */}
+            {/* CV SCORES */}
             {result.cv_scores.length > 0 && (
               <div style={{ marginTop: "15px" }}>
                 <h4>Cross Validation Scores</h4>
@@ -127,7 +127,7 @@ function ModelPage() {
               </div>
             )}
 
-            {/* 🔥 TOP FEATURES */}
+            {/* TOP FEATURES */}
             {result.top_features.length > 0 && (
               <div style={{ marginTop: "15px" }}>
                 <h4>Top Features</h4>
@@ -141,7 +141,7 @@ function ModelPage() {
           </div>
         )}
 
-        {/* ================= TREE IMAGE ================= */}
+        {/* TREE IMAGE */}
         {treeImage && result && (
           <div className="tree-card">
             <h3>{result.model} Visualization</h3>
@@ -154,7 +154,7 @@ function ModelPage() {
         )}
       </div>
 
-      {/* ================= TABLE ================= */}
+      {/* TABLE */}
       {allResults.length > 0 && (
         <div className="table-card">
           <h2>Model Comparison</h2>
@@ -181,7 +181,6 @@ function ModelPage() {
             </tbody>
           </table>
 
-          {/* 🔥 MODEL COMPARISON */}
           <button
             className="viz-btn"
             onClick={() =>
@@ -191,7 +190,6 @@ function ModelPage() {
             View Model Comparison
           </button>
 
-          {/* 🔥 ANOVA */}
           <button
             className="viz-btn"
             onClick={() => navigate("/anova")}
@@ -199,7 +197,6 @@ function ModelPage() {
             View ANOVA Test
           </button>
 
-          {/* 🔥 CROSS VALIDATION */}
           {result && result.cv_scores.length > 0 && (
             <button
               className="viz-btn"

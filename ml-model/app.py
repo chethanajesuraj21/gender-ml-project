@@ -21,15 +21,17 @@ from imblearn.over_sampling import RandomOverSampler
 from pymongo import MongoClient
 from scipy.stats import f_oneway
 
+
+
 app = Flask(__name__)
 CORS(app)
 
 # ===============================
 # MongoDB
 # ===============================
-#client = MongoClient("mongodb://localhost:27017/")
-#db = client["ml_project"]
-#collection = db["results"]
+client = MongoClient("mongodb://localhost:27017/")
+db = client["ml_project"]
+collection = db["results"]
 
 @app.route("/")
 def home():
@@ -64,6 +66,11 @@ def load_data():
 # ===============================
 # RUN MODEL
 # ===============================
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv1D, Dense, Flatten
+from sklearn.metrics import accuracy_score
+import numpy as np
+
 @app.route("/run-model", methods=["POST"])
 def run_model():
     try:
@@ -72,13 +79,52 @@ def run_model():
 
         X, y, feature_names = load_data()
 
+        # ================= CNN SPECIAL =================
+        if model_name == "1D CNN":
+
+            X_cnn = X.reshape((X.shape[0], X.shape[1], 1))
+
+            X_train, X_test, y_train, y_test = train_test_split(
+                X_cnn, y, test_size=0.3, stratify=y, random_state=42
+            )
+
+            model = Sequential()
+
+            model.add(Conv1D(64, 3, activation='relu', input_shape=(X.shape[1], 1)))
+            model.add(Conv1D(128, 3, activation='relu'))
+            model.add(Flatten())
+
+            model.add(Dense(128, activation='relu'))
+            model.add(Dense(64, activation='relu'))
+
+            model.add(Dense(1, activation='sigmoid'))
+
+            model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+            model.fit(X_train, y_train, epochs=30, batch_size=16, verbose=0)
+
+            y_train_pred = (model.predict(X_train) > 0.5).astype(int)
+            y_test_pred = (model.predict(X_test) > 0.5).astype(int)
+
+            train_acc = accuracy_score(y_train, y_train_pred)
+            test_acc = accuracy_score(y_test, y_test_pred)
+
+            return jsonify({
+                "training_accuracy": round(float(train_acc), 4),
+                "testing_accuracy": round(float(test_acc), 4),
+                "cv_mean": round(float(test_acc), 4),
+                "cv_std": 0.0,
+                "cv_scores": [],
+                "tree_image": None,
+                "cv_image": None,
+                "anova_image": None
+            })
+
+        # ================= NORMAL MODELS =================
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.3, stratify=y, random_state=42
         )
 
-        tree_image = None
-
-        # ================= MODEL SELECT =================
         if model_name == "Decision Tree":
             model = DecisionTreeClassifier(max_depth=4, random_state=42)
 
@@ -86,30 +132,7 @@ def run_model():
             model = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42)
 
         elif model_name == "LGBM":
-            model = lgb.LGBMClassifier(n_estimators=80, max_depth=4)
-        
-        elif model_name == "1D CNN":
-            import joblib
-
-            model = joblib.load("rf_model.pkl")
-
-            # reshape for CNN
-            X_train_cnn = X_train.reshape(X_train.shape[0], X_train.shape[1], 1)
-            X_test_cnn = X_test.reshape(X_test.shape[0], X_test.shape[1], 1)
-
-            train_acc = cnn_model.evaluate(X_train_cnn, y_train, verbose=0)[1]
-            test_acc = cnn_model.evaluate(X_test_cnn, y_test, verbose=0)[1]
-
-            return jsonify({
-                "training_accuracy": round(train_acc, 4),
-                "testing_accuracy": round(test_acc, 4),
-                "cv_mean": 0,
-                "cv_std": 0,
-                "cv_scores": [],
-                "anova_models": [],
-                "top_features": [],
-                "tree_image": None
-            })
+            model = lgb.LGBMClassifier(n_estimators=100, learning_rate=0.1, random_state=42)
 
         else:
             return jsonify({"error": "Invalid model"})
@@ -120,89 +143,129 @@ def run_model():
         train_accuracy = model.score(X_train, y_train)
         test_accuracy = model.score(X_test, y_test)
 
-        # ================= 🔥 CROSS VALIDATION =================
+        # ================= CROSS VALIDATION =================
         kf = KFold(n_splits=5, shuffle=True, random_state=42)
-        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+        cv_scores = cross_val_score(model, X, y, cv=kf)
 
-        kf_scores = cross_val_score(model, X, y, cv=kf)
-        skf_scores = cross_val_score(model, X, y, cv=skf)
+        # ================= TREE =================
+        tree_image = None
+        try:
+            fig, ax = plt.subplots(figsize=(20, 10))
 
-        # 👉 STORE BOTH TYPES (IMPORTANT)
-        anova_models = [
-            {
-                "cv_type": "Traditional K-Fold",
-                "model": model_name,
-                "mean": float(kf_scores.mean()),
-                "std": float(kf_scores.std())
-            },
-            {
-                "cv_type": "Stratified K-Fold",
-                "model": model_name,
-                "mean": float(skf_scores.mean()),
-                "std": float(skf_scores.std())
-            }
-        ]
+            if model_name == "Decision Tree":
+                tree.plot_tree(model, feature_names=feature_names, filled=True, ax=ax)
 
-        # ================= FEATURE IMPORTANCE =================
-        importances = model.feature_importances_
-        top_features = sorted(
-            list(zip(feature_names, importances)),
-            key=lambda x: x[1],
-            reverse=True
-        )[:5]
+            elif model_name == "Random Forest":
+                tree.plot_tree(model.estimators_[0], feature_names=feature_names, filled=True, ax=ax)
 
-        # ================= TREE VISUAL =================
-        fig = plt.figure(figsize=(12, 8))
+            elif model_name == "LGBM":
+                lgb.plot_tree(model.booster_, tree_index=0, ax=ax)
 
-        if model_name == "Decision Tree":
-            tree.plot_tree(model, feature_names=feature_names, filled=True)
-        elif model_name == "Random Forest":
-            tree.plot_tree(model.estimators_[0], feature_names=feature_names, filled=True)
-        else:
-            lgb.plot_tree(model, tree_index=0)
+            buf = BytesIO()
+            plt.savefig(buf, format="png")
+            buf.seek(0)
+            tree_image = base64.b64encode(buf.read()).decode("utf-8")
+            plt.close()
 
-        buf = BytesIO()
-        plt.savefig(buf, format="png")
-        plt.close(fig)
-        buf.seek(0)
-        tree_image = base64.b64encode(buf.getvalue()).decode("utf-8")
+        except Exception as e:
+            print("Tree error:", e)
 
-        result = {
-            "model": model_name,
-            "training_accuracy": float(train_accuracy),
-            "testing_accuracy": float(test_accuracy),
-            "kf_mean": float(kf_scores.mean()),
-            "kf_std": float(kf_scores.std()),
-            "skf_mean": float(skf_scores.mean()),
-            "skf_std": float(skf_scores.std()),
-            "timestamp": datetime.now()
-        }
+        # ================= CV GRAPH =================
+        cv_image = None
+        try:
+            fig, ax = plt.subplots()
 
-        #collection.insert_one(result)
+            ax.plot(range(1, 6), cv_scores, marker='o')
+            ax.axhline(cv_scores.mean(), linestyle='--')
 
-        # ================= RESPONSE =================
+            ax.set_title(f"{model_name} K-Fold")
+            ax.set_xlabel("Fold")
+            ax.set_ylabel("Accuracy")
+
+            buf = BytesIO()
+            plt.savefig(buf, format="png")
+            buf.seek(0)
+            cv_image = base64.b64encode(buf.read()).decode("utf-8")
+            plt.close()
+
+        except Exception as e:
+            print("CV error:", e)
+
+        # ================= ANOVA =================
+        anova_image = None
+        try:
+            from sklearn.feature_selection import f_classif
+
+            F, _ = f_classif(X, y)
+
+            fig, ax = plt.subplots()
+            ax.bar(range(len(F)), F)
+            ax.set_title("ANOVA Feature Scores")
+
+            buf = BytesIO()
+            plt.savefig(buf, format="png")
+            buf.seek(0)
+            anova_image = base64.b64encode(buf.read()).decode("utf-8")
+            plt.close()
+
+        except Exception as e:
+            print("ANOVA error:", e)
+
         return jsonify({
             "training_accuracy": round(train_accuracy, 4),
             "testing_accuracy": round(test_accuracy, 4),
-            "cv_mean": round(kf_scores.mean(), 4),
-            "cv_std": round(kf_scores.std(), 4),
-            "cv_scores": kf_scores.tolist(),
-            "anova_models": anova_models,
-            "top_features": [(f, float(v)) for f, v in top_features],
-            "tree_image": tree_image
+            "cv_mean": round(cv_scores.mean(), 4),
+            "cv_std": round(cv_scores.std(), 4),
+            "cv_scores": cv_scores.tolist(),
+            "tree_image": tree_image,
+            "cv_image": cv_image,
+            "anova_image": anova_image
         })
 
     except Exception as e:
-        print("❌ ERROR:", str(e))
+        print("❌ ERROR:", e)
         return jsonify({"error": str(e)})
+def get_cnn_cv_scores(X, y):
+    from tensorflow.keras.models import Sequential
+    from tensorflow.keras.layers import Conv1D, Dense, Flatten
+    from sklearn.model_selection import KFold
+    from sklearn.metrics import accuracy_score
+    import numpy as np
 
+    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    scores = []
+
+    for train_idx, test_idx in kf.split(X):
+        X_train, X_test = X[train_idx], X[test_idx]
+        y_train, y_test = y[train_idx], y[test_idx]
+
+        X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 1))
+        X_test = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
+
+        model = Sequential([
+            Conv1D(64, 3, activation='relu', input_shape=(X.shape[1], 1)),
+            Flatten(),
+            Dense(64, activation='relu'),
+            Dense(1, activation='sigmoid')
+        ])
+
+        model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+        model.fit(X_train, y_train, epochs=10, batch_size=16, verbose=0)
+
+        y_pred = (model.predict(X_test) > 0.5).astype(int)
+
+        acc = accuracy_score(y_test, y_pred)
+        scores.append(acc)
+
+    return np.array(scores) 
 @app.route("/anova", methods=["GET"])
 def anova_test():
     try:
         X, y, _ = load_data()
 
         models = {
-            "Decision Tree": DecisionTreeClassifier(max_depth=4),
+            "Decision Tree": DecisionTreeClassifier(max_depth=5),
             "Random Forest": RandomForestClassifier(n_estimators=100),
             "LGBM": lgb.LGBMClassifier()
         }
@@ -211,64 +274,75 @@ def anova_test():
         skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
         results = []
-
-        # store separately
         kf_dict = {}
         skf_dict = {}
 
-        # ================= RUN MODELS =================
+        # ===== ML MODELS =====
         for name, model in models.items():
             kf_scores = cross_val_score(model, X, y, cv=kf)
             skf_scores = cross_val_score(model, X, y, cv=skf)
 
-            # store scores for ANOVA
             kf_dict[name] = kf_scores
             skf_dict[name] = skf_scores
 
-            # store table results
             results.append({
                 "cv_type": "Traditional K-Fold",
                 "model": name,
-                "mean": float(kf_scores.mean()),
-                "std": float(kf_scores.std())
+                "mean": round(kf_scores.mean(), 4),
+                "std": round(kf_scores.std(), 4)
             })
 
             results.append({
                 "cv_type": "Stratified K-Fold",
                 "model": name,
-                "mean": float(skf_scores.mean()),
-                "std": float(skf_scores.std())
+                "mean": round(skf_scores.mean(), 4),
+                "std": round(skf_scores.std(), 4)
             })
 
-        # ================= 🔥 ANOVA SEPARATE =================
+        # ===== CNN =====
+        cnn_scores = get_cnn_cv_scores(X, y)
 
-        # K-FOLD ANOVA
-        f_kf, p_kf = f_oneway(
-            kf_dict["Decision Tree"],
-            kf_dict["Random Forest"],
-            kf_dict["LGBM"]
-        )
+        kf_dict["1D CNN"] = cnn_scores
+        skf_dict["1D CNN"] = cnn_scores
 
-        # STRATIFIED ANOVA
-        f_skf, p_skf = f_oneway(
-            skf_dict["Decision Tree"],
-            skf_dict["Random Forest"],
-            skf_dict["LGBM"]
-        )
+        results.append({
+            "cv_type": "Traditional K-Fold",
+            "model": "1D CNN",
+            "mean": round(cnn_scores.mean(), 4),
+            "std": round(cnn_scores.std(), 4)
+        })
+
+        results.append({
+            "cv_type": "Stratified K-Fold",
+            "model": "1D CNN",
+            "mean": round(cnn_scores.mean(), 4),
+            "std": round(cnn_scores.std(), 4)
+        })
+
+        # ===== ANOVA =====
+        f_kf, p_kf = f_oneway(*kf_dict.values())
+        f_skf, p_skf = f_oneway(*skf_dict.values())
+
+        k = len(kf_dict)
+        n = k * 5
+
+        df_between = k - 1
+        df_within = n - k
 
         return jsonify({
             "results": results,
-
             "anova": {
                 "kfold": {
-                    "f": round(f_kf, 3),
-                    "p": round(p_kf, 3),
-                    "df": 2
+                    "f_value": round(f_kf, 4),
+                    "p_value": round(p_kf, 4),
+                    "df_between": df_between,
+                    "df_within": df_within
                 },
                 "stratified": {
-                    "f": round(f_skf, 3),
-                    "p": round(p_skf, 3),
-                    "df": 3
+                    "f_value": round(f_skf, 4),
+                    "p_value": round(p_skf, 4),
+                    "df_between": df_between,
+                    "df_within": df_within
                 }
             }
         })
@@ -276,6 +350,7 @@ def anova_test():
     except Exception as e:
         print("❌ ANOVA ERROR:", str(e))
         return jsonify({"error": str(e)})
+    
 # ===============================
 # CLEAR
 # ===============================
