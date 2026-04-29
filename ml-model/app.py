@@ -25,10 +25,6 @@ from scipy.stats import f_oneway
 
 app = Flask(__name__)
 CORS(app)
-
-# ===============================
-# MongoDB
-# ===============================
 client = MongoClient("mongodb://localhost:27017/")
 db = client["ml_project"]
 collection = db["results"]
@@ -36,10 +32,6 @@ collection = db["results"]
 @app.route("/")
 def home():
     return "ML Backend Running ✅"
-
-# ===============================
-# LOAD DATA
-# ===============================
 def load_data():
     dataset_path = os.path.join(
     os.path.dirname(__file__),
@@ -63,13 +55,12 @@ def load_data():
 
     return X, y, df.columns[:-1]
 
-# ===============================
-# RUN MODEL
-# ===============================
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv1D, Dense, Flatten
 from sklearn.metrics import accuracy_score
 import numpy as np
+
+from sklearn.model_selection import StratifiedKFold
 
 @app.route("/run-model", methods=["POST"])
 def run_model():
@@ -79,48 +70,51 @@ def run_model():
 
         X, y, feature_names = load_data()
 
-        # ================= CNN SPECIAL =================
         if model_name == "1D CNN":
-
             X_cnn = X.reshape((X.shape[0], X.shape[1], 1))
+            skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+            scores = []
 
-            X_train, X_test, y_train, y_test = train_test_split(
-                X_cnn, y, test_size=0.3, stratify=y, random_state=42
-            )
+            for train_idx, test_idx in skf.split(X, y):
 
-            model = Sequential()
+                X_train, X_test = X_cnn[train_idx], X_cnn[test_idx]
+                y_train, y_test = y[train_idx], y[test_idx]
 
-            model.add(Conv1D(64, 3, activation='relu', input_shape=(X.shape[1], 1)))
-            model.add(Conv1D(128, 3, activation='relu'))
-            model.add(Flatten())
+                model = Sequential([
+                    Conv1D(64, 3, activation='relu', input_shape=(X.shape[1], 1)),
+                    Conv1D(128, 3, activation='relu'),
+                    Flatten(),
+                    Dense(128, activation='relu'),
+                    Dense(64, activation='relu'),
+                    Dense(1, activation='sigmoid')
+        ])
 
-            model.add(Dense(128, activation='relu'))
-            model.add(Dense(64, activation='relu'))
+                model.compile(
+                    optimizer='adam',
+                    loss='binary_crossentropy',
+                    metrics=['accuracy']
+        )
 
-            model.add(Dense(1, activation='sigmoid'))
+                model.fit(X_train, y_train, epochs=15, batch_size=16, verbose=0)
 
-            model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+                y_pred = (model.predict(X_test) > 0.5).astype(int)
+                acc = accuracy_score(y_test, y_pred)
 
-            model.fit(X_train, y_train, epochs=30, batch_size=16, verbose=0)
+                scores.append(acc)
 
-            y_train_pred = (model.predict(X_train) > 0.5).astype(int)
-            y_test_pred = (model.predict(X_test) > 0.5).astype(int)
-
-            train_acc = accuracy_score(y_train, y_train_pred)
-            test_acc = accuracy_score(y_test, y_test_pred)
+            scores = np.array(scores)
 
             return jsonify({
-                "training_accuracy": round(float(train_acc), 4),
-                "testing_accuracy": round(float(test_acc), 4),
-                "cv_mean": round(float(test_acc), 4),
-                "cv_std": 0.0,
-                "cv_scores": [],
+                "training_accuracy": round(float(scores.max()), 4),
+                "testing_accuracy": round(float(scores.mean()), 4),
+                "cv_mean": round(float(scores.mean()), 4),
+                "cv_std": round(float(scores.std()), 4),
+                "cv_scores": list(np.round(scores, 4)),
                 "tree_image": None,
                 "cv_image": None,
                 "anova_image": None
             })
 
-        # ================= NORMAL MODELS =================
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.3, stratify=y, random_state=42
         )
@@ -136,18 +130,12 @@ def run_model():
 
         else:
             return jsonify({"error": "Invalid model"})
-
-        # ================= TRAIN =================
         model.fit(X_train, y_train)
 
         train_accuracy = model.score(X_train, y_train)
         test_accuracy = model.score(X_test, y_test)
-
-        # ================= CROSS VALIDATION =================
         kf = KFold(n_splits=5, shuffle=True, random_state=42)
         cv_scores = cross_val_score(model, X, y, cv=kf)
-
-        # ================= TREE =================
         tree_image = None
         try:
             fig, ax = plt.subplots(figsize=(20, 10))
@@ -169,8 +157,6 @@ def run_model():
 
         except Exception as e:
             print("Tree error:", e)
-
-        # ================= CV GRAPH =================
         cv_image = None
         try:
             fig, ax = plt.subplots()
@@ -191,7 +177,6 @@ def run_model():
         except Exception as e:
             print("CV error:", e)
 
-        # ================= ANOVA =================
         anova_image = None
         try:
             from sklearn.feature_selection import f_classif
@@ -225,22 +210,23 @@ def run_model():
     except Exception as e:
         print("❌ ERROR:", e)
         return jsonify({"error": str(e)})
-def get_cnn_cv_scores(X, y):
+def cnn_kfold(X, y):
+    from sklearn.model_selection import StratifiedKFold
     from tensorflow.keras.models import Sequential
     from tensorflow.keras.layers import Conv1D, Dense, Flatten
-    from sklearn.model_selection import KFold
     from sklearn.metrics import accuracy_score
     import numpy as np
 
-    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     scores = []
 
-    for train_idx, test_idx in kf.split(X):
-        X_train, X_test = X[train_idx], X[test_idx]
-        y_train, y_test = y[train_idx], y[test_idx]
+    X_cnn = X.reshape((X.shape[0], X.shape[1], 1))
 
-        X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 1))
-        X_test = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
+    for fold, (train_idx, test_idx) in enumerate(skf.split(X, y)):
+        print(f"Running CNN Fold {fold+1}")  # 🔥 DEBUG
+
+        X_train, X_test = X_cnn[train_idx], X_cnn[test_idx]
+        y_train, y_test = y[train_idx], y[test_idx]
 
         model = Sequential([
             Conv1D(64, 3, activation='relu', input_shape=(X.shape[1], 1)),
@@ -250,15 +236,18 @@ def get_cnn_cv_scores(X, y):
         ])
 
         model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-
         model.fit(X_train, y_train, epochs=10, batch_size=16, verbose=0)
 
         y_pred = (model.predict(X_test) > 0.5).astype(int)
-
         acc = accuracy_score(y_test, y_pred)
+
+        print("Fold Accuracy:", acc)  # 🔥 DEBUG
+
         scores.append(acc)
 
-    return np.array(scores) 
+    print("CNN Scores:", scores)  # 🔥 DEBUG
+
+    return np.array(scores)
 @app.route("/anova", methods=["GET"])
 def anova_test():
     try:
@@ -300,49 +289,45 @@ def anova_test():
             })
 
         # ===== CNN =====
-        cnn_scores = get_cnn_cv_scores(X, y)
+        try:
+            cnn_scores = cnn_kfold(X, y)
 
-        kf_dict["1D CNN"] = cnn_scores
-        skf_dict["1D CNN"] = cnn_scores
+            kf_dict["1D CNN"] = cnn_scores
+            skf_dict["1D CNN"] = cnn_scores
 
-        results.append({
-            "cv_type": "Traditional K-Fold",
-            "model": "1D CNN",
-            "mean": round(cnn_scores.mean(), 4),
-            "std": round(cnn_scores.std(), 4)
-        })
+            results.append({
+                "cv_type": "Traditional K-Fold",
+                "model": "1D CNN",
+                "mean": round(float(cnn_scores.mean()), 4),
+                "std": round(float(cnn_scores.std()), 4)
+            })
 
-        results.append({
-            "cv_type": "Stratified K-Fold",
-            "model": "1D CNN",
-            "mean": round(cnn_scores.mean(), 4),
-            "std": round(cnn_scores.std(), 4)
-        })
+            results.append({
+                "cv_type": "Stratified K-Fold",
+                "model": "1D CNN",
+                "mean": round(float(cnn_scores.mean()), 4),
+                "std": round(float(cnn_scores.std()), 4)
+            })
+
+        except Exception as e:
+            print("❌ CNN ERROR:", e)
 
         # ===== ANOVA =====
         f_kf, p_kf = f_oneway(*kf_dict.values())
         f_skf, p_skf = f_oneway(*skf_dict.values())
 
-        k = len(kf_dict)
-        n = k * 5
-
-        df_between = k - 1
-        df_within = n - k
-
         return jsonify({
             "results": results,
             "anova": {
                 "kfold": {
-                    "f_value": round(f_kf, 4),
-                    "p_value": round(p_kf, 4),
-                    "df_between": df_between,
-                    "df_within": df_within
+                    "f": round(f_kf, 3),
+                    "p": round(p_kf, 3),
+                    "df": len(kf_dict) - 1
                 },
                 "stratified": {
-                    "f_value": round(f_skf, 4),
-                    "p_value": round(p_skf, 4),
-                    "df_between": df_between,
-                    "df_within": df_within
+                    "f": round(f_skf, 3),
+                    "p": round(p_skf, 3),
+                    "df": len(skf_dict) - 1
                 }
             }
         })
@@ -350,7 +335,6 @@ def anova_test():
     except Exception as e:
         print("❌ ANOVA ERROR:", str(e))
         return jsonify({"error": str(e)})
-    
 # ===============================
 # CLEAR
 # ===============================
@@ -369,20 +353,12 @@ import joblib
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 
-
-
-# ===============================
-# LOAD DATA (your existing function)
-# ===============================
 X, y, _ = load_data()
 
 _, X_test, _, y_test = train_test_split(
     X, y, test_size=0.3, stratify=y, random_state=42
 )
 
-# ===============================
-# LOAD MODELS (ONCE)
-# ===============================
 try:
     dt = joblib.load("dt_model.pkl")
     rf = joblib.load("rf_model.pkl")
@@ -390,17 +366,39 @@ try:
 except:
     dt = rf = lgbm = None
 
-# ===============================
-# HYBRID API
-# ===============================
 @app.route("/hybrid-results", methods=["GET"])
 def hybrid_results():
     try:
+        # Ensure models are loaded
+        if dt is None or rf is None or lgbm is None:
+            return jsonify({"error": "Models not loaded"})
+
+        # ML predictions
         dt_pred = dt.predict(X_test)
         rf_pred = rf.predict(X_test)
         lgb_pred = lgbm.predict(X_test)
-        
 
+        # ================= CNN PREDICTION =================
+        from tensorflow.keras.models import Sequential
+        from tensorflow.keras.layers import Conv1D, Dense, Flatten
+
+        X_cnn = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
+
+        model = Sequential([
+            Conv1D(64, 3, activation='relu', input_shape=(X_test.shape[1], 1)),
+            Flatten(),
+            Dense(64, activation='relu'),
+            Dense(1, activation='sigmoid')
+        ])
+
+        model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+        # ⚠️ Quick training (you can improve later)
+        model.fit(X_cnn, y_test, epochs=5, batch_size=16, verbose=0)
+
+        cnn_pred = (model.predict(X_cnn) > 0.5).astype(int).flatten()
+
+        # ================= HYBRID =================
         hybrid_pred = (
             (0.4 * rf_pred) +
             (0.3 * lgb_pred) +
@@ -416,8 +414,34 @@ def hybrid_results():
         })
 
     except Exception as e:
+        print("❌ HYBRID ERROR:", e)
         return jsonify({"error": str(e)})
+@app.route("/upload", methods=["POST"])
+def upload():
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
 
+        file = request.files["file"]
+
+        if file.filename == "":
+            return jsonify({"error": "Empty filename"}), 400
+
+        os.makedirs("uploads", exist_ok=True)
+
+        filepath = os.path.join("uploads", file.filename)
+        file.save(filepath)
+
+        print("✅ File saved at:", filepath)
+
+        return jsonify({
+            "message": "File uploaded successfully",
+            "filename": file.filename
+        })
+
+    except Exception as e:
+        print("❌ Upload Error:", e)
+        return jsonify({"error": str(e)}), 500
 # ===============================
 # RUN
 # ===============================

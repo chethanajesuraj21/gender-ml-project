@@ -37,7 +37,14 @@ function ModelPage() {
 
       if (!res.ok) throw new Error("Server error");
 
-      const data = await res.json();
+      const text = await res.text();
+
+let data;
+try {
+  data = JSON.parse(text);
+} catch {
+  throw new Error("Server returned HTML instead of JSON ❌");
+}
       console.log("API RESPONSE:", data);
 
       const newResult = {

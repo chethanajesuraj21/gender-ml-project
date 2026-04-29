@@ -6,7 +6,7 @@ function AnovaPage() {
   const [data, setData] = useState(null);
 
   useEffect(() => {
-    fetch("https://gender-ml-project.onrender.com/anova")
+    fetch("http://127.0.0.1:5000/anova")
       .then(res => res.json())
       .then(setData)
       .catch(() => alert("ANOVA fetch error ❌"));
@@ -64,9 +64,9 @@ function AnovaPage() {
         {/* Show ANOVA only once */}
         {i === 0 && (
           <>
-            <td rowSpan={4}>{data.anova.kfold.f.toFixed(3)}</td>
-            <td rowSpan={4}>{data.anova.kfold.df}</td>
-            <td rowSpan={4}>{data.anova.kfold.p.toFixed(3)}</td>
+            <td rowSpan={3}>{data.anova.kfold.f.toFixed(3)}</td>
+            <td rowSpan={3}>{data.anova.kfold.df}</td>
+            <td rowSpan={3}>{data.anova.kfold.p.toFixed(3)}</td>
           </>
         )}
       </tr>
@@ -84,9 +84,9 @@ function AnovaPage() {
 
         {i === 0 && (
           <>
-            <td rowSpan={4}>{data.anova.stratified.f.toFixed(3)}</td>
-            <td rowSpan={4}>{data.anova.stratified.df}</td>
-            <td rowSpan={4}>{data.anova.stratified.p.toFixed(3)}</td>
+            <td rowSpan={3}>{data.anova.stratified.f.toFixed(3)}</td>
+            <td rowSpan={3}>{data.anova.stratified.df}</td>
+            <td rowSpan={3}>{data.anova.stratified.p.toFixed(3)}</td>
           </>
         )}
       </tr>

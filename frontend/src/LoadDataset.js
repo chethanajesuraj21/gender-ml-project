@@ -27,14 +27,16 @@ function LoadDataset() {
 
     const data = await res.json();
 
-    if (res.ok) {
-      alert("Dataset Loaded ✅");
-      navigate("/models");
-    } else {
-      alert(data.error);
+    if (!res.ok) {
+      throw new Error(data.error || "Upload failed");
     }
+
+    alert("Dataset Loaded ✅");
+    navigate("/models");
+
   } catch (err) {
-    alert("Backend not running ❌");
+    console.error(err);
+    alert("Upload failed ❌: " + err.message);
   }
 };
 
