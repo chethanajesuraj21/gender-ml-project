@@ -16,7 +16,7 @@ function Register() {
       return;
     }
 
-    const res = await fetch("https://gender-ml-project.onrender.com/Register", {
+    const res = await fetch("https://gender-ml-project.onrender.com", {
       method: "POST",
       headers: {"Content-Type":"application/json"},
       body: JSON.stringify({ name, email, password })

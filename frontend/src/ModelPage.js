@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import "./ModelPage.css";
 
 // ✅ ADD THIS
-const BASE_URL = "http://127.0.0.1:5000";
+const BASE_URL = "https://gender-ml-project-1.onrender.com";
 
 function ModelPage() {
   const [result, setResult] = useState(null);
@@ -37,14 +37,7 @@ function ModelPage() {
 
       if (!res.ok) throw new Error("Server error");
 
-      const text = await res.text();
-
-let data;
-try {
-  data = JSON.parse(text);
-} catch {
-  throw new Error("Server returned HTML instead of JSON ❌");
-}
+      const data = await res.json();
       console.log("API RESPONSE:", data);
 
       const newResult = {

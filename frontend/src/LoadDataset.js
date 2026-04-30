@@ -20,12 +20,19 @@ function LoadDataset() {
   formData.append("file", file);
 
   try {
-    const res = await fetch("http://127.0.0.1:5000/upload", {
+    const res = await fetch("https://gender-ml-project-1.onrender.com/upload", {
       method: "POST",
       body: formData,
     });
 
-    const data = await res.json();
+    const text = await res.text();
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error("Server returned HTML instead of JSON");
+    }
 
     if (!res.ok) {
       throw new Error(data.error || "Upload failed");
@@ -35,7 +42,6 @@ function LoadDataset() {
     navigate("/models");
 
   } catch (err) {
-    console.error(err);
     alert("Upload failed ❌: " + err.message);
   }
 };

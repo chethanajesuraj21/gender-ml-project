@@ -6,7 +6,7 @@ function AnovaPage() {
   const [data, setData] = useState(null);
 
   useEffect(() => {
-    fetch("http://127.0.0.1:5000/anova")
+    fetch("https://gender-ml-project-1.onrender.com/anova")
       .then(res => res.json())
       .then(setData)
       .catch(() => alert("ANOVA fetch error ❌"));
