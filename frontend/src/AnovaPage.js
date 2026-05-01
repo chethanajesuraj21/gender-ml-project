@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-const BASE_URL = "https://gender-ml-project-1.onrender.com";
+const BASE_URL = "https://gender-ml-project-2.onrender.com";
 
 function AnovaPage() {
   const navigate = useNavigate();
@@ -233,4 +233,4 @@ const S = {
   },
 };
 
-export default AnovaPage;
+export default AnovaPage;  
