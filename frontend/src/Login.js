@@ -4,7 +4,6 @@ import "./Auth.css";
 
 const AUTH_URL = "https://gender-ml-auth.onrender.com";
 
-
 function Login() {
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
