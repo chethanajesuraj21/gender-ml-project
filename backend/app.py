@@ -25,7 +25,8 @@ app = Flask(__name__)
 
 CORS(app, origins=[
     "http://localhost:3000",
-    os.environ.get("FRONTEND_URL", "https://your-vercel-app.vercel.app")
+    "https://gender-ml-project-2.vercel.app",
+    os.environ.get("FRONTEND_URL", "https://gender-ml-project-2.vercel.app")
 ])
 
 
