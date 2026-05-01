@@ -1,63 +1,131 @@
 const express = require("express");
 const mongoose = require("mongoose");
-const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const cors = require("cors");
+require("dotenv").config();
 
 const app = express();
-app.use(cors());
+
 app.use(express.json());
+app.use(cors({
+  origin: ["http://localhost:3000"]
+}));
 
-// 🔥 MongoDB Connection
-mongoose.connect("mongodb://127.0.0.1:27017/gender_app")
-.then(() => console.log("MongoDB Connected"))
-.catch(err => console.log(err));
+// ✅ MongoDB Connection
+mongoose.connect(process.env.MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+.then(() => console.log("✅ MongoDB connected"))
+.catch(err => console.error("❌ MongoDB error:", err));
 
-// 🔥 User Schema
-const User = mongoose.model("User", {
+// ✅ Schemas
+const userSchema = new mongoose.Schema({
   name: String,
-  email: String,
-  password: String
+  email: { type: String, unique: true },
+  password: String,
+}, { timestamps: true });
+
+const resultSchema = new mongoose.Schema({
+  userId: mongoose.Schema.Types.ObjectId,
+  model: String,
+
+  // ✅ FIXED FIELD NAMES (match frontend)
+  train: Number,
+  test: Number,
+  cv_mean: Number,
+  cv_std: Number,
+  cv_scores: [Number],
+
+}, { timestamps: true });
+
+const User = mongoose.model("User", userSchema);
+const Result = mongoose.model("Result", resultSchema);
+
+// ✅ JWT Middleware
+const SECRET = process.env.JWT_SECRET;
+
+function authMiddleware(req, res, next) {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return res.status(401).json({ error: "No token" });
+
+  try {
+    req.user = jwt.verify(token, SECRET);
+    next();
+  } catch {
+    res.status(401).json({ error: "Invalid token" });
+  }
+}
+
+// ✅ Routes
+
+app.get("/", (req, res) => {
+  res.json({ message: "Server running ✅" });
 });
 
-// ================= REGISTER =================
+// REGISTER
 app.post("/register", async (req, res) => {
-  try {
-    const { name, email, password } = req.body;
+  const { name, email, password } = req.body;
 
-    const existing = await User.findOne({ email });
-    if (existing) return res.json({ error: "User already exists" });
+  const exists = await User.findOne({ email });
+  if (exists) return res.status(400).json({ error: "Email exists" });
 
-    const hashed = await bcrypt.hash(password, 10);
+  const hashed = await bcrypt.hash(password, 10);
+  const user = await User.create({ name, email, password: hashed });
 
-    const user = new User({ name, email, password: hashed });
-    await user.save();
-
-    res.json({ message: "Registered successfully" });
-
-  } catch (err) {
-    res.json({ error: err.message });
-  }
+  res.json({ message: "Registered", userId: user._id });
 });
 
-// ================= LOGIN =================
+// LOGIN
 app.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  const user = await User.findOne({ email });
+  if (!user) return res.status(400).json({ error: "User not found" });
+
+  const match = await bcrypt.compare(password, user.password);
+  if (!match) return res.status(400).json({ error: "Wrong password" });
+
+  const token = jwt.sign({ userId: user._id }, SECRET, { expiresIn: "7d" });
+
+  res.json({ token, name: user.name });
+});
+
+// ✅ SAVE RESULT (FIXED)
+app.post("/save-result", authMiddleware, async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const result = await Result.create({
+      userId: req.user.userId,
 
-    const user = await User.findOne({ email });
-    if (!user) return res.json({ error: "User not found" });
+      // ✅ MATCH FRONTEND EXACTLY
+      model: req.body.model,
+      train: req.body.training_accuracy,
+      test: req.body.testing_accuracy,
+      cv_mean: req.body.cv_mean,
+      cv_std: req.body.cv_std,
+      cv_scores: req.body.cv_scores,
+    });
 
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) return res.json({ error: "Invalid password" });
-
-    const token = jwt.sign({ id: user._id }, "secretkey");
-
-    res.json({ message: "Login success", token });
-
+    res.json({ message: "Saved", id: result._id });
   } catch (err) {
-    res.json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: "Save failed" });
   }
 });
 
-app.listen(4000, () => console.log("Auth server running on 4000"));
+// GET RESULTS
+app.get("/my-results", authMiddleware, async (req, res) => {
+  const results = await Result.find({ userId: req.user.userId });
+  res.json({ results });
+});
+
+// CLEAR RESULTS
+app.delete("/clear-results", authMiddleware, async (req, res) => {
+  await Result.deleteMany({ userId: req.user.userId });
+  res.json({ message: "Cleared" });
+});
+
+// START SERVER
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));

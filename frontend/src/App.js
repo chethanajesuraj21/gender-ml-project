@@ -1,14 +1,22 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { useState } from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import Login        from "./Login";
+import Register     from "./Register";
+import LoadDataset  from "./LoadDataset";
+import ModelPage    from "./ModelPage";
+import ChartPage    from "./ChartPage";
+import AnovaPage    from "./AnovaPage";
 
-import Login from "./Login";
-import Register from "./Register";
-
-import LoadDataset from "./LoadDataset";
-import ModelPage from "./ModelPage";
-import ChartPage from "./ChartPage";
-import AnovaPage from "./AnovaPage";
+// Guard: redirect to /login if no token
+function PrivateRoute({ children }) {
+  const token = localStorage.getItem("token");
+  return token ? children : <Navigate to="/login" replace />;
+}
 
 function App() {
+  // Single source of truth for ML results
+  const [mlResults, setMlResults] = useState([]);
+
   return (
     <Router>
       <div
@@ -17,22 +25,47 @@ function App() {
           backgroundImage: "url('/background.png')",
           backgroundSize: "cover",
           backgroundPosition: "center",
-          backgroundRepeat: "no-repeat"
+          backgroundRepeat: "no-repeat",
         }}
       >
         <Routes>
 
-          {/* 🔐 LOGIN */}
-          <Route path="/login" element={<Login />} />
-
-          {/* 📝 REGISTER */}
+          {/* ── Public Routes ── */}
+          <Route path="/login"    element={<Login />} />
           <Route path="/register" element={<Register />} />
 
-          {/* 📂 MAIN FLOW */}
-          <Route path="/" element={<LoadDataset />} />
-          <Route path="/models" element={<ModelPage />} />
-          <Route path="/chart" element={<ChartPage />} />
-          <Route path="/anova" element={<AnovaPage />} />
+          {/* ── Protected Routes ── */}
+          <Route path="/" element={
+            <PrivateRoute>
+              <LoadDataset />
+            </PrivateRoute>
+          } />
+
+          {/* ModelPage: needs both — reads AND writes mlResults */}
+          <Route path="/models" element={
+            <PrivateRoute>
+              <ModelPage
+                mlResults={mlResults}
+                setMlResults={setMlResults}
+              />
+            </PrivateRoute>
+          } />
+
+          {/* ChartPage: only reads mlResults, no setter needed */}
+          <Route path="/chart" element={
+            <PrivateRoute>
+              <ChartPage mlResults={mlResults} />
+            </PrivateRoute>
+          } />
+
+          <Route path="/anova" element={
+            <PrivateRoute>
+              <AnovaPage />
+            </PrivateRoute>
+          } />
+
+          {/* Fallback — catch all unknown routes */}
+          <Route path="*" element={<Navigate to="/login" replace />} />
 
         </Routes>
       </div>

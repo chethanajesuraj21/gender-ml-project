@@ -17,39 +17,25 @@ from sklearn.ensemble import RandomForestClassifier
 import lightgbm as lgb
 
 from imblearn.over_sampling import RandomOverSampler
-from pymongo import MongoClient
 from scipy.stats import f_oneway
 import numpy as np
 import joblib
 
 app = Flask(__name__)
 
-# ✅ FIX 1: Allow your Vercel domain (update this URL after deploying to Vercel)
 CORS(app, origins=[
     "http://localhost:3000",
-    "https://your-vercel-app.vercel.app"  # 🔁 Replace with your actual Vercel URL
+    os.environ.get("FRONTEND_URL", "https://your-vercel-app.vercel.app")
 ])
 
-# ✅ FIX 2: MongoDB URI from environment variable (not hardcoded localhost)
-MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017/")
-client = MongoClient(MONGO_URI)
-db = client["ml_project"]
-collection = db["results"]
 
-
-# ===============================
-# LOAD DATA
-# ===============================
 def load_data():
-    # ✅ FIX 3: Correct dataset path for Render deployment
     dataset_path = os.path.join(
         os.path.dirname(__file__),
         "dataset",
         "eopen_final_strict_genderwise_country_dataset.csv"
     )
-
     df = pd.read_csv(dataset_path)
-
     df["Gender"] = df["Gender"].map({"Male": 0, "Female": 1})
     df["Country"] = df["Country"].astype("category").cat.codes
     df["Academic_Degree"] = df["Academic_Degree"].astype("category").cat.codes
@@ -66,9 +52,6 @@ def load_data():
     return X, y, df.drop("Gender", axis=1).columns
 
 
-# ===============================
-# ✅ FIX 4: Safe startup model loading — won't crash server if .pkl missing
-# ===============================
 try:
     _X, _y, _ = load_data()
     _, X_test_global, _, y_test_global = train_test_split(
@@ -77,30 +60,22 @@ try:
     X_train_global = _X[:len(_X) - len(X_test_global)]
     y_train_global = _y[:len(_y) - len(y_test_global)]
 
-    dt_model  = joblib.load(os.path.join(os.path.dirname(__file__), "dt_model.pkl"))
-    rf_model  = joblib.load(os.path.join(os.path.dirname(__file__), "rf_model.pkl"))
+    dt_model   = joblib.load(os.path.join(os.path.dirname(__file__), "dt_model.pkl"))
+    rf_model   = joblib.load(os.path.join(os.path.dirname(__file__), "rf_model.pkl"))
     lgbm_model = joblib.load(os.path.join(os.path.dirname(__file__), "lgbm_model.pkl"))
-
-    print("✅ Startup: models and data loaded successfully")
-
+    print("✅ Models loaded")
 except Exception as e:
-    print(f"⚠️ Startup load warning: {e}")
+    print(f"⚠️ Startup warning: {e}")
     X_test_global = y_test_global = None
     X_train_global = y_train_global = None
     dt_model = rf_model = lgbm_model = None
 
 
-# ===============================
-# HOME
-# ===============================
 @app.route("/")
 def home():
     return "ML Backend Running ✅"
 
 
-# ===============================
-# CNN K-FOLD HELPER
-# ===============================
 def cnn_kfold(X, y):
     from tensorflow.keras.models import Sequential
     from tensorflow.keras.layers import Conv1D, Dense, Flatten
@@ -111,8 +86,6 @@ def cnn_kfold(X, y):
     X_cnn = X.reshape((X.shape[0], X.shape[1], 1))
 
     for fold, (train_idx, test_idx) in enumerate(skf.split(X, y)):
-        print(f"Running CNN Fold {fold + 1}")
-
         X_train, X_test = X_cnn[train_idx], X_cnn[test_idx]
         y_train, y_test = y[train_idx], y[test_idx]
 
@@ -124,30 +97,22 @@ def cnn_kfold(X, y):
             Dense(64, activation='relu'),
             Dense(1, activation='sigmoid')
         ])
-
         model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
         model.fit(X_train, y_train, epochs=15, batch_size=16, verbose=0)
 
         y_pred = (model.predict(X_test) > 0.5).astype(int)
-        acc = accuracy_score(y_test, y_pred)
-        scores.append(acc)
-        print(f"Fold {fold + 1} Accuracy: {acc:.4f}")
+        scores.append(accuracy_score(y_test, y_pred))
 
     return np.array(scores)
 
 
-# ===============================
-# RUN MODEL
-# ===============================
 @app.route("/run-model", methods=["POST"])
 def run_model():
     try:
         data = request.get_json()
         model_name = data.get("model", "")
-
         X, y, feature_names = load_data()
 
-        # ── 1D CNN ──────────────────────────────────────────────────────────
         if model_name == "1D CNN":
             from tensorflow.keras.models import Sequential
             from tensorflow.keras.layers import Conv1D, Dense, Flatten
@@ -171,7 +136,6 @@ def run_model():
                 ])
                 cnn.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
                 cnn.fit(X_train, y_train, epochs=15, batch_size=16, verbose=0)
-
                 y_pred = (cnn.predict(X_test) > 0.5).astype(int)
                 scores.append(accuracy_score(y_test, y_pred))
 
@@ -187,7 +151,6 @@ def run_model():
                 "anova_image": None
             })
 
-        # ── ML Models ───────────────────────────────────────────────────────
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.3, stratify=y, random_state=42
         )
@@ -202,14 +165,11 @@ def run_model():
             return jsonify({"error": f"Unknown model: {model_name}"}), 400
 
         model.fit(X_train, y_train)
-
         train_accuracy = model.score(X_train, y_train)
         test_accuracy  = model.score(X_test,  y_test)
-
         kf = KFold(n_splits=5, shuffle=True, random_state=42)
         cv_scores = cross_val_score(model, X, y, cv=kf)
 
-        # Tree image
         tree_image = None
         try:
             fig, ax = plt.subplots(figsize=(20, 10))
@@ -227,7 +187,6 @@ def run_model():
         except Exception as e:
             print("Tree image error:", e)
 
-        # CV image
         cv_image = None
         try:
             fig, ax = plt.subplots()
@@ -245,7 +204,6 @@ def run_model():
         except Exception as e:
             print("CV image error:", e)
 
-        # ANOVA feature scores image
         anova_image = None
         try:
             from sklearn.feature_selection import f_classif
@@ -279,14 +237,10 @@ def run_model():
         return jsonify({"error": str(e)}), 500
 
 
-# ===============================
-# ANOVA TEST
-# ===============================
 @app.route("/anova", methods=["GET"])
 def anova_test():
     try:
         X, y, _ = load_data()
-
         models = {
             "Decision Tree": DecisionTreeClassifier(max_depth=5),
             "Random Forest": RandomForestClassifier(n_estimators=100),
@@ -295,7 +249,6 @@ def anova_test():
 
         kf  = KFold(n_splits=5, shuffle=True, random_state=42)
         skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-
         results  = []
         kf_dict  = {}
         skf_dict = {}
@@ -303,18 +256,15 @@ def anova_test():
         for name, model in models.items():
             kf_scores  = cross_val_score(model, X, y, cv=kf)
             skf_scores = cross_val_score(model, X, y, cv=skf)
-
             kf_dict[name]  = kf_scores
             skf_dict[name] = skf_scores
-
-            results.append({"cv_type": "Traditional K-Fold",  "model": name,
-                            "mean": round(float(kf_scores.mean()),  4),
-                            "std":  round(float(kf_scores.std()),   4)})
+            results.append({"cv_type": "Traditional K-Fold", "model": name,
+                            "mean": round(float(kf_scores.mean()), 4),
+                            "std":  round(float(kf_scores.std()),  4)})
             results.append({"cv_type": "Stratified K-Fold", "model": name,
                             "mean": round(float(skf_scores.mean()), 4),
                             "std":  round(float(skf_scores.std()),  4)})
 
-        # CNN
         try:
             cnn_scores = cnn_kfold(X, y)
             kf_dict["1D CNN"]  = cnn_scores
@@ -326,7 +276,7 @@ def anova_test():
                             "mean": round(float(cnn_scores.mean()), 4),
                             "std":  round(float(cnn_scores.std()),  4)})
         except Exception as e:
-            print("❌ CNN in ANOVA error:", e)
+            print("CNN ANOVA error:", e)
 
         f_kf,  p_kf  = f_oneway(*kf_dict.values())
         f_skf, p_skf = f_oneway(*skf_dict.values())
@@ -334,25 +284,126 @@ def anova_test():
         return jsonify({
             "results": results,
             "anova": {
-                "kfold":      {"fS": round(float(f_kf),  3), "p": round(float(p_kf),  3), "df": len(kf_dict)  - 1},
+                "kfold":      {"f": round(float(f_kf),  3), "p": round(float(p_kf),  3), "df": len(kf_dict)  - 1},
                 "stratified": {"f": round(float(f_skf), 3), "p": round(float(p_skf), 3), "df": len(skf_dict) - 1}
             }
         })
-
+    except Exception as e:
+        print("❌ ANOVA ERROR:", e)
+        return jsonify({"error": str(e)}), 500
+@app.route("/anova", methods=["GET"])
+def anova_test():
+    try:
+        X, y, _ = load_data()
+ 
+        models = {
+            "Decision Tree": DecisionTreeClassifier(max_depth=5),
+            "Random Forest": RandomForestClassifier(n_estimators=100),
+            "LGBM":          lgb.LGBMClassifier()
+        }
+ 
+        kf  = KFold(n_splits=5, shuffle=True, random_state=42)
+        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+ 
+        results  = []
+        kf_dict  = {}   # name -> np.array of scores
+        skf_dict = {}
+ 
+        # ── Tree-based models ────────────────────────────────────────────────
+        for name, model in models.items():
+            try:
+                kf_scores  = cross_val_score(model, X, y, cv=kf,  scoring="accuracy")
+                skf_scores = cross_val_score(model, X, y, cv=skf, scoring="accuracy")
+ 
+                kf_dict[name]  = kf_scores
+                skf_dict[name] = skf_scores
+ 
+                results.append({
+                    "cv_type": "Traditional K-Fold",
+                    "model":   name,
+                    "mean":    round(float(kf_scores.mean()), 4),
+                    "std":     round(float(kf_scores.std()),  4)
+                })
+                results.append({
+                    "cv_type": "Stratified K-Fold",
+                    "model":   name,
+                    "mean":    round(float(skf_scores.mean()), 4),
+                    "std":     round(float(skf_scores.std()),  4)
+                })
+                print(f"✅ {name} done — KF mean={kf_scores.mean():.4f}, SKF mean={skf_scores.mean():.4f}")
+ 
+            except Exception as e:
+                print(f"⚠️  Skipping {name} in ANOVA: {e}")
+ 
+        # ── 1D CNN (optional — skip if TF unavailable or slow) ───────────────
+        try:
+            cnn_scores = cnn_kfold(X, y)
+ 
+            kf_dict["1D CNN"]  = cnn_scores
+            skf_dict["1D CNN"] = cnn_scores
+ 
+            results.append({
+                "cv_type": "Traditional K-Fold",
+                "model":   "1D CNN",
+                "mean":    round(float(cnn_scores.mean()), 4),
+                "std":     round(float(cnn_scores.std()),  4)
+            })
+            results.append({
+                "cv_type": "Stratified K-Fold",
+                "model":   "1D CNN",
+                "mean":    round(float(cnn_scores.mean()), 4),
+                "std":     round(float(cnn_scores.std()),  4)
+            })
+            print(f"✅ 1D CNN done — mean={cnn_scores.mean():.4f}")
+ 
+        except Exception as e:
+            print(f"⚠️  CNN skipped in ANOVA (non-fatal): {e}")
+ 
+        # ── ANOVA F-test (only if ≥ 2 groups succeeded) ─────────────────────
+        anova_result = {
+            "kfold":      {"f": None, "p": None, "df": None},
+            "stratified": {"f": None, "p": None, "df": None}
+        }
+ 
+        if len(kf_dict) >= 2:
+            try:
+                f_kf, p_kf = f_oneway(*kf_dict.values())
+                anova_result["kfold"] = {
+                    "f":  round(float(f_kf),  3),
+                    "p":  round(float(p_kf),  3),
+                    "df": len(kf_dict) - 1
+                }
+            except Exception as e:
+                print(f"⚠️  KFold f_oneway failed: {e}")
+ 
+        if len(skf_dict) >= 2:
+            try:
+                f_skf, p_skf = f_oneway(*skf_dict.values())
+                anova_result["stratified"] = {
+                    "f":  round(float(f_skf), 3),
+                    "p":  round(float(p_skf), 3),
+                    "df": len(skf_dict) - 1
+                }
+            except Exception as e:
+                print(f"⚠️  Stratified f_oneway failed: {e}")
+ 
+        print(f"📊 ANOVA returning {len(results)} rows, "
+              f"KF f={anova_result['kfold']['f']}, SKF f={anova_result['stratified']['f']}")
+ 
+        return jsonify({
+            "results": results,
+            "anova":   anova_result
+        })
+ 
     except Exception as e:
         print("❌ ANOVA ERROR:", e)
         return jsonify({"error": str(e)}), 500
 
-
-# ===============================
-# HYBRID MODEL
-# ===============================
 @app.route("/hybrid-results", methods=["GET"])
 def hybrid_results():
     try:
         if dt_model is None or rf_model is None or lgbm_model is None:
-            return jsonify({"error": "Pretrained models (.pkl) not found on server"}), 500
-
+            return jsonify({"error": "Pretrained models (.pkl) not found"}), 500
         if X_test_global is None:
             return jsonify({"error": "Test data not loaded"}), 500
 
@@ -364,7 +415,6 @@ def hybrid_results():
         rf_pred   = rf_model.predict(X_test_global)
         lgbm_pred = lgbm_model.predict(X_test_global)
 
-        # ✅ FIX 5: Train CNN on TRAIN data, predict on TEST data (no data leakage)
         X_cnn_train = X_train_global.reshape((X_train_global.shape[0], X_train_global.shape[1], 1))
         X_cnn_test  = X_test_global.reshape((X_test_global.shape[0],  X_test_global.shape[1],  1))
 
@@ -380,57 +430,33 @@ def hybrid_results():
         cnn.fit(X_cnn_train, y_train_global, epochs=15, batch_size=16, verbose=0)
         cnn_pred = (cnn.predict(X_cnn_test) > 0.5).astype(int).flatten()
 
-        # Weighted ensemble
         hybrid_pred = ((0.4 * rf_pred) + (0.3 * lgbm_pred) + (0.3 * cnn_pred)) > 0.5
         hybrid_pred = hybrid_pred.astype(int)
-
         acc = accuracy_score(y_test_global, hybrid_pred)
 
         return jsonify({"final_accuracy": round(acc * 100, 2)})
-
     except Exception as e:
         print("❌ HYBRID ERROR:", e)
         return jsonify({"error": str(e)}), 500
 
 
-# ===============================
-# UPLOAD
-# ===============================
 @app.route("/upload", methods=["POST"])
 def upload():
     try:
         if "file" not in request.files:
             return jsonify({"error": "No file uploaded"}), 400
-
         file = request.files["file"]
         if file.filename == "":
             return jsonify({"error": "Empty filename"}), 400
-
         upload_dir = os.path.join(os.path.dirname(__file__), "uploads")
         os.makedirs(upload_dir, exist_ok=True)
-
         filepath = os.path.join(upload_dir, file.filename)
         file.save(filepath)
-
         return jsonify({"message": "File uploaded successfully", "filename": file.filename})
-
     except Exception as e:
-        print("❌ Upload Error:", e)
         return jsonify({"error": str(e)}), 500
 
 
-# ===============================
-# CLEAR RESULTS
-# ===============================
-@app.route("/clear-results", methods=["DELETE"])
-def clear_results():
-    collection.delete_many({})
-    return jsonify({"message": "Cleared"})
-
-
-# ===============================
-# RUN
-# ===============================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
