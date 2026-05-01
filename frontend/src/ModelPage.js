@@ -32,7 +32,7 @@ function ModelPage() {
       const timeoutMs  = model === "1D CNN" ? 300_000 : 120_000;
       const timer      = setTimeout(() => controller.abort(), timeoutMs);
 
-      const res = await fetch(`${AUTH_URL}/run-model`, {
+      const res = await fetch(`${ML_URL}/run-model`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model }),
