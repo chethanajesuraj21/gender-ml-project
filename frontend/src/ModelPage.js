@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "./ModelPage.css";
 
-const ML_URL   = "https://gender-ml-project-1.onrender.com";
+const ML_URL = "https://gender-ml-project-2.onrender.com";
 const AUTH_URL = "https://gender-ml-auth.onrender.com";
 
 function ModelPage() {

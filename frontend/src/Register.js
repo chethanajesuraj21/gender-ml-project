@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Auth.css";
 
-const AUTH_URL = "http://localhost:4000";
+const AUTH_URL = "https://gender-ml-auth.onrender.com";
 
 function Register() {
   const [name, setName]         = useState("");
